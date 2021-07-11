@@ -1,0 +1,291 @@
+import tkinter as tk
+import time
+import math
+import sys
+import random
+
+class Ball:
+    def __init__(self, canvas, box, x1, y1, x2, y2, dx, dy, max_speed, x_acceleration, y_acceleration, max_acceleration, x_jerk, y_jerk, jerk):
+        self.canvas = canvas
+        self.box = box
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.x_center = (x1 + x2)/2
+        self.y_center = (y1 + y2)/2
+        self.dx = dx
+        self.dy = dy
+        self.max_speed = max_speed
+        self.x_acceleration = x_acceleration
+        self.y_acceleration = y_acceleration
+        self.max_acceleration = max_acceleration
+        self.x_jerk = x_jerk
+        self.y_jerk = y_jerk
+        self.jerk = jerk
+        self.start = time.time()
+        self.id = canvas.create_oval(x1, y1, x2, y2, fill="red", outline="red")
+        if playing_side != "paddle":
+            self.canvas.bind_all("<KeyPress-w>", self.up_fall)
+            self.canvas.bind_all("<KeyPress-a>", self.left_fall)
+            self.canvas.bind_all("<KeyPress-s>", self.down_fall)
+            self.canvas.bind_all("<KeyPress-d>", self.right_fall)
+    def draw(self):
+        self.x_acceleration += self.x_jerk
+        self.y_acceleration += self.y_jerk
+        self.scale_acceleration()
+        self.dx += self.x_acceleration
+        self.dy += self.y_acceleration
+        self.scale_speed()
+        self.canvas.move(self.id, self.dx, self.dy)
+        coords = self.canvas.coords(self.id)
+        self.x_center = (coords[0] + coords[2])/2
+        self.y_center = (coords[1] + coords[3])/2
+    def scale_acceleration(self):
+        total_acceleration = math.sqrt(self.x_acceleration**2 + self.y_acceleration**2)
+        if total_acceleration > self.max_acceleration:
+            self.x_acceleration *= self.max_acceleration/total_acceleration
+            self.y_acceleration *= self.max_acceleration/total_acceleration
+    def scale_speed(self):
+        total_speed = math.sqrt(self.dx**2 + self.dy**2)
+        if total_speed > self.max_speed:
+            self.dx *= self.max_speed/total_speed
+            self.dy *= self.max_speed/total_speed
+    def up_fall(self, event):
+        self.x_jerk = 0
+        self.y_jerk = -self.jerk
+    def down_fall(self, event):
+        self.x_jerk = 0
+        self.y_jerk = self.jerk
+    def left_fall(self, event):
+        self.x_jerk = -self.jerk
+        self.y_jerk = 0
+    def right_fall(self, event):
+        self.x_jerk = self.jerk
+        self.y_jerk = 0
+    def hit_box(self):
+        ball_coords = self.canvas.coords(self.id)
+        return ball_coords[0] < self.box.x1 or ball_coords[1] < self.box.y1 or ball_coords[2] > self.box.x2 or ball_coords[3] > self.box.y2
+    def ai_move(self):
+        if time.time() - self.start > 0.5:
+            num = random.randint(1, 4)
+            if num == 1:
+                self.up_fall("")
+            elif num == 2:
+                self.down_fall("")
+            elif num == 3:
+                self.left_fall("")
+            else:
+                self.right_fall("")
+            self.start = time.time()
+
+class SidePaddle:
+    def __init__(self, canvas, ball, side, x1, y1, x2, y2, dx, speed, min_x, max_x):
+        self.canvas = canvas
+        self.ball = ball
+        self.side = side
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.dx = dx
+        self.speed = speed
+        self.min = min_x
+        self.max = max_x
+        self.id = canvas.create_rectangle(x1, y1, x2, y2, fill = "black")
+        if playing_side != "ball":
+            self.canvas.bind_all("<KeyPress-Left>", self.move_left, "+")
+            self.canvas.bind_all("<KeyPress-Right>", self.move_right, "+")
+    def draw(self):
+        self.canvas.move(self.id, self.dx, 0)
+        pos = self.canvas.coords(self.id)
+        if pos[0] <= self.min:
+            self.canvas.move(self.id, self.min - pos[0], 0)
+            self.dx = 0
+        elif pos[2] >= self.max:
+            self.canvas.move(self.id, self.max - pos[2], 0)
+            self.dx = 0
+    def hit_ball(self):
+        paddle_coords = self.canvas.coords(self.id)
+        ball_coords = self.canvas.coords(self.ball.id)
+        ball_center = ball_coords[0] + (ball_coords[2] - ball_coords[0])/2
+        in_range = paddle_coords[0] < ball_center < paddle_coords[2]
+        if self.side == "up":
+            return ball_coords[1] <= self.y2 and in_range
+        return ball_coords[3] >= self.y1 and in_range
+    def move_left(self, event):
+        self.dx = -self.speed
+    def move_right(self, event):
+        self.dx = self.speed
+    def ai_move(self):
+        paddle_coords = self.canvas.coords(self.id)
+        ball_coords = self.canvas.coords(self.ball.id)
+        if self.ball.dx < 0 and (ball_coords[0] + ball_coords[2])/2 < paddle_coords[0]:
+            self.move_left("")
+        elif self.ball.dx > 0 and (ball_coords[0] + ball_coords[2])/2 > paddle_coords[2]:
+            self.move_right("")
+
+class UpPaddle:
+    def __init__(self, canvas, ball, side, x1, y1, x2, y2, dy, speed, min_y, max_y):
+        self.canvas = canvas
+        self.ball = ball
+        self.side = side
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.dy = dy
+        self.speed = speed
+        self.min = min_y
+        self.max = max_y
+        self.id = canvas.create_rectangle(x1, y1, x2, y2, fill="black")
+        if playing_side != "ball":
+            self.canvas.bind_all("<KeyPress-Up>", self.move_up, "+")
+            self.canvas.bind_all("<KeyPress-Down>", self.move_down, "+")
+    def draw(self):
+        self.canvas.move(self.id, 0, self.dy)
+        pos = self.canvas.coords(self.id)
+        if pos[1] <= self.min:
+            self.canvas.move(self.id, 0, self.min - pos[1])
+            self.dy = 0
+        elif pos[3] >= self.max:
+            self.canvas.move(self.id, 0, self.max - pos[3])
+            self.dy = 0
+    def hit_ball(self):
+        paddle_coords = self.canvas.coords(self.id)
+        ball_coords = self.canvas.coords(self.ball.id)
+        ball_center = ball_coords[1] + (ball_coords[3] - ball_coords[1])/2
+        in_range = paddle_coords[1] < ball_center < paddle_coords[3]
+        if self.side == "left":
+            return ball_coords[0] <= self.x2 and in_range
+        return ball_coords[2] >= self.x1 and in_range
+    def move_up(self, event):
+        self.dy = -self.speed
+    def move_down(self, event):
+        self.dy = self.speed
+    def ai_move(self):
+        paddle_coords = self.canvas.coords(self.id)
+        ball_coords = self.canvas.coords(self.ball.id)
+        if self.ball.dy < 0 and (ball_coords[1] + ball_coords[3])/2 < paddle_coords[1]:
+            self.move_up("")
+        elif self.ball.dy > 0 and (ball_coords[1] + ball_coords[3])/2 > paddle_coords[3]:
+            self.move_down("")
+
+class Box:
+    def __init__(self, canvas, x1, y1, x2, y2):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        canvas.create_rectangle(x1, y1, x2, y2)
+
+class Arrow:
+    def __init__(self, canvas, ball, x_center, y_center, radius, color="black"):
+        self.canvas = canvas
+        self.ball = ball
+        self.x_center = x_center
+        self.y_center = y_center
+        self.radius = radius
+        self.id = canvas.create_line(x_center, y_center, x_center, y_center, arrow = tk.LAST, fill = color)
+    def draw_acceleration(self):
+        if self.ball.y_acceleration == self.ball.x_acceleration == 0:
+            pass
+        else:
+            x_length = self.radius * self.ball.x_acceleration/self.ball.max_acceleration
+            y_length = self.radius * self.ball.y_acceleration/self.ball.max_acceleration
+            self.canvas.coords(self.id, self.x_center, self.y_center, self.x_center + x_length, self.y_center + y_length)
+    def draw_speed(self):
+        x_length = self.radius * self.ball.dx/self.ball.max_speed
+        y_length = self.radius * self.ball.dy/self.ball.max_speed
+        self.canvas.coords(self.id, self.ball.x_center, self.ball.y_center, self.ball.x_center + x_length, self.ball.y_center + y_length)
+
+def run_game():
+    canvas.delete("all")
+    button1.destroy()
+    button2.destroy()
+    box = Box(canvas, 100, 100, 501, 501)
+    ball = Ball(canvas, box, 290, 290, 311, 311, 0, 0, 7, 0, 0, 0.3, 0, 0, 0.015)
+    left_paddle = UpPaddle(canvas, ball, "left", 105, 160, 116, 441, 0, 6, 115, 486)
+    right_paddle = UpPaddle(canvas, ball, "right", 485, 160, 496, 441, 0, 6, 115, 486)
+    top_paddle = SidePaddle(canvas, ball, "up", 160, 105, 441, 116, 0, 6, 115, 486)
+    bottom_paddle = SidePaddle(canvas, ball, "down", 160, 485, 441, 496, 0, 6, 115, 486)
+    gravity_arrow = Arrow(canvas, ball, 550, 230, 40)
+    #speed_arrow = Arrow(canvas, ball, ball.x_center, ball.y_center, 40, "red")
+    start = time.time()
+    count = 15
+    timer = canvas.create_text(20, 20, text="Time remaining: " + str(count) + " seconds", anchor=tk.NW)
+    canvas.create_text(550, 170, text="Gravity", anchor=tk.N)
+    window.update()
+    while count > 0:
+        ball.draw()
+        left_paddle.draw()
+        right_paddle.draw()
+        top_paddle.draw()
+        bottom_paddle.draw()
+        gravity_arrow.draw_acceleration()
+        #speed_arrow.draw_speed()
+        if playing_side == "ball":
+            left_paddle.ai_move()
+            right_paddle.ai_move()
+            top_paddle.ai_move()
+            bottom_paddle.ai_move()
+        elif playing_side == "paddle":
+            ball.ai_move()
+        if left_paddle.hit_ball():
+            ball.dx *= -1
+            canvas.move(ball.id, canvas.coords(left_paddle.id)[2] - canvas.coords(ball.id)[0], 0)
+        if right_paddle.hit_ball():
+            ball.dx *= -1
+            canvas.move(ball.id, canvas.coords(right_paddle.id)[0] - canvas.coords(ball.id)[2], 0)
+        if top_paddle.hit_ball():
+            ball.dy *= -1
+            canvas.move(ball.id, 0, canvas.coords(top_paddle.id)[3] - canvas.coords(ball.id)[1])
+        if bottom_paddle.hit_ball():
+            ball.dy *= -1
+            canvas.move(ball.id, 0, canvas.coords(bottom_paddle.id)[1] - canvas.coords(ball.id)[3])
+        if ball.hit_box():
+            break
+        if count != math.ceil(15 + start - time.time()):
+            count -= 1
+            canvas.itemconfig(timer, text="Time remaining: " + str(count) + " seconds")
+        window.update()
+        time.sleep(0.01)
+    else:
+        canvas.delete("all")
+        canvas.create_text(300, 300, text="Paddle Wins!")
+        window.update()
+        time.sleep(5)
+        window.quit()
+        sys.exit()
+    canvas.delete("all")
+    canvas.create_text(300, 300, text="Ball Wins!")
+    window.update()
+    time.sleep(5)
+    window.quit()
+    sys.exit()
+
+def computer_mode():
+    canvas.itemconfig(player_prompt, text="Play as ball or paddle?")
+    button1.config(text="Ball", command=run_ball)
+    button2.config(text="Paddle", command=run_paddle)
+    window.mainloop()
+def run_ball():
+    global playing_side
+    playing_side = "ball"
+    run_game()
+def run_paddle():
+    global playing_side
+    playing_side = "paddle"
+    run_game()
+
+window = tk.Tk()
+window.title("Gravity Pong")
+canvas = tk.Canvas(width=600, height=600)
+canvas.pack()
+playing_side = "human"
+player_prompt = canvas.create_text(300, 250, text="Play against human or computer?")
+button1 = tk.Button(canvas, text="Human", command=run_game)
+button2 = tk.Button(canvas, text="Computer", command=computer_mode)
+button1.place(x=250, y=300, anchor="center")
+button2.place(x=350, y=300, anchor="center")
+window.mainloop()
